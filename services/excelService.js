@@ -2,26 +2,28 @@ import ExcelJS from 'exceljs';
 import fs from 'fs';
 
 export const streamReadExcel = async (filePath) => {
-  return new Promise(async (resolve, reject) => {
-    const rows = [];
-    const workbook = new ExcelJS.Workbook();
+  const rows = [];
+  try {
+    const workbook = new ExcelJS.stream.xlsx.WorkbookReader(filePath);
 
-    try {
-      await workbook.xlsx.readFile(filePath);
-      const worksheet = workbook.getWorksheet(1);
-
-      worksheet.eachRow({ includeEmpty: false }, (row) => {
-        rows.push(row.values.slice(1)); // remove first null element
-      });
-
-      resolve(rows);
-    } catch (error) {
-      reject(error);
-    } finally {
-      fs.unlinkSync(filePath); // cleanup uploaded file
+    for await (const worksheetReader of workbook) { // loops over each sheet
+      for await (const row of worksheetReader) { // loops over each row in that sheet
+        rows.push(row.values.slice(1)); // remove first null value
+      }
     }
-  });
+
+    return rows;
+  } catch (error) {
+    throw error;
+  } finally {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath); // cleanup
+    }
+  }
 };
+
+
+
 
 export const streamWriteExcel = async (rowCount) => {
   const workbook = new ExcelJS.Workbook();
@@ -30,6 +32,9 @@ export const streamWriteExcel = async (rowCount) => {
   for (let i = 1; i <= rowCount; i++) {
     worksheet.addRow([`Row ${i}`, Math.random()]);
   }
+
+//   await workbook.xlsx.writeFile(filePath); // Saves to disk
+//   console.log(`Workbook saved to ${filePath}`);
 
   const buffer = await workbook.xlsx.writeBuffer();
   return buffer;
